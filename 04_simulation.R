@@ -8,7 +8,8 @@ qty_per_bid <- read_csv2("./generated-data/qty_per_bid.csv")$x
 p <- 150:300
 ad <- seq(2000, 10000, by = 1000)
 grid <- expand_grid(p, ad)
-iter <- 20000
+iter <- 500
+size <- 500
 
 # Cria as quantidades esperadas para cada faixa de 
 # preço e publiciade
@@ -41,7 +42,7 @@ estimates <-
 start <- Sys.time()
 probs <-
   grid %>%
-  pmap_dfr(~ compare_prob(.x, .y, qty_per_bid, iter))
+  pmap_dfr(~ compare_prob(.x, .y, qty_per_bid, iter, size))
 print(Sys.time() - start)
 
 # Salva as estimativas e probabilidades

@@ -3,33 +3,37 @@ set.seed(123)
 
 qty_per_bid <- read_csv2("./generated-data/qty_per_bid.csv")$x
 
-p <- c(150, 200, 250, 300)
-ad <- c(2000, 10000)
+p <- c(185)
+ad <- c(2000)
 
-iter <- tibble(iter = c(1000, 5000, 10000, 20000, 30000))
+iter <- c(10,50, 100, 500, 1000)
+size <- c(100, 500, 1000)
+reps <- 50
 
-convergence <-
-  expand_grid(p, ad, iter) %>%
-  rowwise() %>%
-  mutate(qty_hat = qty_hat(p, ad, qty_per_bid))
+get_prob <- function(reps, p, ad, qty_per_bid, iter, size) {
+  prob <- numeric(reps)
+  sample <- numeric(reps)
+  
+  start <- Sys.time()
+  for (i in 1:reps) {
+    prob[i] <- compare_prob(p, ad, qty_per_bid, iter, size)$p_delta_profit
+    sample[i] <- i
+  }
+  end <- Sys.time()
+  
+  mean_time = as.numeric(difftime(end, start, units = "secs")) / reps
+  ttc = as.numeric(difftime(end, start, units = "mins")) / reps  * 1359
+  error = prob - mean(prob)
+  tibble(p, ad, iter, size, sample, prob, mean_time, ttc, error) 
+}
 
-convergence$sim_res <-
-  convergence %>% pmap_dbl(~ gen_series(..1, ..2, qty_per_bid, size = ..3) %>% mean)
-
-convergence <-
-  mutate(convergence, combination = paste0("P = ", p, " / AD = ", ad))
-
-convergence %>%
-  ggplot(aes(x = iter, color = combination, group = combination)) +
-  geom_line(aes(y = sim_res)) +
-  geom_line(aes(y = qty_hat), linetype = "dashed") +
-  ylab("Conjuntos de uniformes - un.") +
-  xlab("Iterações") +
-  labs(color = "Combinações de \nP e AD")
-
-ggsave(
-  "./plots/convergence.png",
-  height = 7,
-  width = 12,
-  units = "cm"
-)
+print("Starting sampling...")
+start <- Sys.time()
+convergence <- 
+  expand_grid(iter, size) %>% 
+  pmap_dfr(~get_prob(reps, p, ad, qty_per_bid, .x, .y))
+print(paste0("Sampling finished.", Sys.time() - start))
+      
+print("Writing results...")      
+write_csv2(convergence, "./generated-data/convergence.csv")
+print("Done!")
