@@ -28,6 +28,10 @@ logit <- function(x, r, x_base, y_base) {
   1 / (1 + exp(-r * (x - x_0)))
 }
 
+power <- function(x, base, a, b) {
+  base + a * (x - AD_0) ^ b
+}
+
 add_noise <- function(x, sd) {
   x + rnorm(length(x), 0, sd)
 } 
@@ -45,13 +49,13 @@ correct_bids_req <- function(br) {
 
 bw <- function(p, type = "avg") {
   if (type == "avg") {
-    expected <- logit(p, BW_R[1], P_0, BW_0)
+    r <- BW_R[1]
   } else if (type == "ns") {
-    expected <- logit(p, BW_R[2], P_0, BW_0)
+    r <- BW_R[2]
   } else if (type == "sens") {
-    expected <- logit(p, BW_R[3], P_0, BW_0)
+    r <- BW_R[3]
   }
-  expected
+  logit(p, BW_R[3], P_0, BW_0)
 }
 
 bw_hat <- function(p) {
@@ -61,13 +65,13 @@ bw_hat <- function(p) {
 
 br <- function(ad, type = "avg") {
   if (type == "avg") {
-    ans <- BR_0 + BR_A[1] * (ad - AD_0) ^ BR_B[1]
+    a <- BR_A[1]
   } else if (type == "opt") {
-    ans <- BR_0 + BR_A[2] * (ad - AD_0) ^ BR_B[2]
+    a <- BR_A[2]
   } else if (type == "pes") {
-    ans <- BR_0 + BR_A[3] * (ad - AD_0) ^ BR_B[3]
+    a <- BR_A[3]
   }
-  ans
+  power(ad, BR_0, a, BR_B[3])
 }
 
 br_hat <- function(ad) {
@@ -80,30 +84,62 @@ qty_hat <- function(p, ad, qty_per_bid) {
   br_hat(ad) * bw_hat(p) * mean(qty_per_bid)
 }
 
-gen_series <- function(p, ad, qty_per_bid, size = 1) {
-  bw_type <-
-    sample(BW_SCEN,
-           size,
-           replace = TRUE,
-           prob = BW_SCENARIO_PROB)
-  br_type <-
-    sample(BR_SCEN,
-           size,
-           replace = TRUE,
-           prob = BR_SCENARIO_PROB)
-  
-  bw_samples <- map_dbl(bw_type, ~ bw(p, .x))
-  br_samples <- map_dbl(br_type, ~ br(ad, .x))
-  
-  bw_samples <-
-    bw_samples %>% add_noise(BW_SD) %>% correct_bw_prob()
-  br_samples <-
-    br_samples %>% add_noise(BR_SD) %>% correct_bids_req()
-  
+gen_bw_samples <- function(p, gen_types = FALSE, size = 1) {
+  bw_samples <- numeric(size)
+  if(gen_types) {
+      bw_type <- sample(BW_SCEN, size, replace = TRUE, prob = BW_SCENARIO_PROB)
+      bw_samples <- map_dbl(bw_type, ~ bw(p, .x)) %>%
+        add_noise(BW_SD) %>%
+        correct_bw_prob()
+  } else {
+    y_base <- rnorm(size, BW_0, BW_EST[2] - BW_EST[1])
+      y_base[y_base < 0] <- 0
+      y_base[y_base > 1] <- 1
+    r <- sample(BW_R, size, replace = TRUE, prob = BW_SCENARIO_PROB)
+    bw_samples <- logit(rep(p, size), r, P_0, y_base)
+  }
+  bw_samples
+}
+
+gen_br_samples <- function(ad, gen_types = FALSE, size = 1) {
+  br_samples <- numeric(size)
+  if(gen_types) {
+      br_type <- sample(BR_SCEN, size, replace = TRUE, prob = BR_SCENARIO_PROB)
+      br_samples <- map_dbl(br_type, ~ br(ad, .x)) %>%
+        add_noise(BR_SD) %>%
+        correct_bids_req()
+  } else {
+    y_base <- rnorm(size, BR_0, BR_EST[2] - BR_EST[1])
+    a <- sample(BR_A, size, replace = TRUE, prob = BR_SCENARIO_PROB)
+    br_samples <- power(rep(ad, size), y_base, a, 0.7)
+  }
+  br_samples
+}
+
+gen_qty <- function(br_samples, bw_samples, qty_per_bid, size) {
   orders <- bw_samples * br_samples
   qty_per_bid <- sample(qty_per_bid, size, replace = TRUE)
-  qty <- orders * qty_per_bid
-  
+  orders * qty_per_bid
+}
+
+gen_series <- function(
+  p,
+  ad,
+  qty_per_bid,
+  type = c("scenario", "random_curve"),
+  size = 1) {
+  qty <- numeric(size)
+
+  if (type == "scenario") {
+    br_samples <- gen_br_samples(ad, TRUE, size)
+    bw_samples <- gen_bw_samples(p, TRUE, size)
+    qty <- gen_qty(br_samples, bw_samples, qty_per_bid, size)
+  }
+  if(type == "random_curve") {
+    br_samples <- gen_br_samples(ad, FALSE, size)
+    bw_samples <- gen_bw_samples(p, FALSE, size)
+    qty <- gen_qty(br_samples, bw_samples, qty_per_bid, size)
+  }
   qty
 }
 
@@ -111,11 +147,15 @@ compare_prob <-
   function(p,
            ad,
            qty_per_bid,
+           type = c("scenario", "random_curve"),
+           iter = 10,
            size = 50) {
-    q1 <-
-      gen_series(p, ad, qty_per_bid, size)
-    q2 <-
-      gen_series(P_0, AD_0, qty_per_bid, size)
+    q1 <- matrix(ncol = iter, nrow = size)
+    q2 <- matrix(ncol = iter, nrow = size)
+    for (i in 1:iter) {
+      q1[,i] <- gen_series(p, ad, qty_per_bid, type, size)
+      q2[,i] <- gen_series(P_0, AD_0, qty_per_bid, type, size)
+    }
     
     rev1 <- q1 * p
     rev2 <- q2 * P_0
@@ -125,6 +165,7 @@ compare_prob <-
              size,
              replace = TRUE,
              prob = VAR_COST_PROB)
+    
     cost1 <- q1 * var_cost_samples
     cost2 <- q2 * var_cost_samples
     
@@ -136,6 +177,7 @@ compare_prob <-
     
     delta_profit <- profit1 - profit2
     p_delta_profit <- sum(delta_profit > 0) / size
+    p_delta_profit <- mean(rowMeans(delta_profit > 0))
     
     delta_qty <- q1 - q2
     p_delta_qty <- sum(delta_qty > 0) / size
@@ -144,7 +186,7 @@ compare_prob <-
     p_delta_margin <- sum(delta_margin > 0) / size
     
     delta_cost <- cost1 - cost2
-    p_delta_cost <- sum(delta_cost > 0) / size
+    p_delta_cost <- sum(delta_cost < 0) / size
     
     return(
       list(
@@ -154,6 +196,4 @@ compare_prob <-
         "p_delta_profit" = p_delta_profit
       )
     )
-    
   }
-
