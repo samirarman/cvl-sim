@@ -1,6 +1,7 @@
 library(tidyverse)
 library(extrafont)
 library(gridExtra)
+library(reshape)
 source("./R/functions.R")
 
 loadfonts()
@@ -45,70 +46,6 @@ theme_set(
   )
 )
 
-# Curvas da função R ----
-data <- tibble(
-  ad = 2000:10000,
-  'Esperado' = br(2000:10000),
-  'Otimista' = br(2000:10000, "opt"),
-  'Pessimista' = br(2000:10000, "pes")
-) %>%
-  pivot_longer(cols = -ad,
-               names_to = "Cenário",
-               values_to = "br")
-
-data %>%
-  ggplot(aes(
-    x = ad,
-    y = br,
-    group = `Cenário`,
-    color = `Cenário`
-  )) +
-  geom_line() +
-  theme(legend.position = c(0.2, 0.8)) +
-  scale_color_manual(values = c("black", "blue", "red")) +
-  xlab("Investimento em publicidade - R$") +
-  ylab("Pedidos de orçamentos recebidos")
-
-ggsave(
-  "./plots/r_curve.png",
-  device = "png",
-  width = 12,
-  height = 7,
-  units = "cm"
-)
-
-
-# Curvas da função W ----
-data <- tibble(
-  p = 150:300,
-  'Esperado' = bw(150:300),
-  'Mais senível' = bw(150:300, "ns"),
-  'Menos sensível' = bw(150:300, "sens")
-) %>%
-  pivot_longer(cols = -p,
-               names_to = "Cenário",
-               values_to = "bw")
-
-data %>%
-  ggplot(aes(
-    x = p,
-    y = bw * 100,
-    group = `Cenário`,
-    color = `Cenário`
-  )) +
-  geom_line() +
-  theme(legend.position = c(0.85, 0.8), ) +
-  scale_color_manual(values = c("black", "blue", "red")) +
-  xlab("Preço - R$") +
-  ylab("Orçamentos vencidos - %")
-
-ggsave(
-  "./plots/w_curves.png",
-  device = "png",
-  width = 12,
-  height = 7,
-  units = "cm"
-)
 
 # Distribuição de probabilidade de q ----
 
@@ -128,179 +65,95 @@ ggsave(
   units = "cm"
 )
 
-# Comparativos de densidade R e W ----
-
-
-set.seed(123)
-samples <- 2e4
-
-# Função para produzir gráficos de densidade
-dens_plot <- function(data, var) {
-  data %>%
-    ggplot(aes(x = x,
-               linetype = {
-                 {
-                   var
-                 }
-               })) +
-    geom_density() +
-    theme(
-      legend.text = element_text(hjust = 1),
-      legend.position = c(0.85, 0.8),
-      legend.box.just = "right",
-      legend.box.background =  element_rect(fill = "white", color = "black")
-    ) +
-    ylab("Densidade de probabilidade")
-}
-
-# Comparativo entre as densidades de probabilidade
-# de R com cenário médio quando AD = 2000 e AD = 10000
-ad_2000 <- rnorm(samples, br(AD_0), BR_SD)
-ad_10000 <- rnorm(samples, br(10000), BR_SD)
-
-data <- tibble(x = c(ad_2000, ad_10000),
-               AD = c(rep(2000, samples), rep(10000, samples)) %>% as_factor)
-
-data %>%
-  ggplot(aes(x = x,
-             linetype = AD)) +
-  geom_density() +
-  theme(
-    legend.text = element_text(hjust = 1),
-    legend.position = c(0.85, 0.8),
-    legend.box.just = "right",
-    legend.box.background =  element_rect(fill = "white", color = "black")
-  ) +
-  ylab("Densidade de probabilidade") + 
-  xlab("Número de pedidos recebidos")
-
-ggsave(
-  "./plots/r_density.png",
-  device = "png",
-  width = 12,
-  height = 7,
-  units = "cm"
-)
-
-# Comparativo entre as densidades de probabilidade
-# de W com cenário médio quando P = 184 e P = 220
-p_184 <- rnorm(samples, bw(P_0), BW_SD)
-p_220 <- rnorm(samples, bw(220), BW_SD)
-
-data <- tibble(x = c(p_184, p_220),
-               P = c(rep(184, samples), rep(220, samples)) %>% as_factor)
-
-data %>%
-  ggplot(aes(x = 100 * x,
-             linetype = P)) +
-  geom_density() +
-  theme(
-    legend.text = element_text(hjust = 1),
-    legend.position = c(0.85, 0.8),
-    legend.box.just = "right",
-    legend.box.background =  element_rect(fill = "white", color = "black")
-  ) +
-  ylab("Densidade de probabilidade") + 
-  xlab("Orçamentos vencidos - %")
-
-ggsave(
-  "./plots/w_density.png",
-  device = "png",
-  width = 12,
-  height = 7,
-  units = "cm"
-)
-
 # Gráficos de convergência ----
+convergence <- read_csv2("./generated-data/convergence.csv")
 
-p <- c(150, 200, 250, 300)
-ad <- c(2000, 10000)
+p <- convergence %>%
+  mutate(ttc = -1 * as.numeric(ttc)) %>%
+  ggplot(aes(x = sample, y = 100 * error)) +
+  geom_line() +
+  geom_hline(yintercept = c(-0.5, .5), color = "lightgray") +
+  geom_hline(yintercept = c(-0.25, 0.25), color = "darkgray") +
+  facet_grid(size ~ iter)
 
-iter <- tibble(iter = c(1000, 5000, 10000, 20000, 30000))
+ann <- convergence %>%
+  group_by(size, iter) %>%
+  summarise(label = max(as.numeric(ttc)))
 
-convergence <-
-  expand_grid(p, ad, iter) %>%
-  rowwise() %>%
-  mutate(qty_hat = qty_hat(p, ad, qty_per_bid))
-
-convergence$sim_res <-
-  convergence %>% pmap_dbl(~ gen_series(..1, ..2, qty_per_bid, size = ..3) %>% mean)
-
-convergence <-
-  mutate(convergence, combination = paste0("P = ", p, " / AD = ", ad))
-
-convergence %>%
-  ggplot(aes(x = iter, color = combination, group = combination)) +
-  geom_line(aes(y = sim_res)) +
-  geom_line(aes(y = qty_hat), linetype = "dashed") +
-  ylab("Conjuntos de uniformes - un.") +
-  xlab("Iterações") +
-  labs(color = "Combinações de \nP e AD")
+p + geom_text(
+  data = ann,
+  mapping = aes(
+    x = -Inf,
+    y = -Inf,
+    label = paste0("ttc=", round(label, 2), " min")
+  ),
+  hjust = -.1,
+  vjust = -1
+)
 
 ggsave(
   "./plots/convergence.png",
-  height = 7,
-  width = 12,
+  height = 16,
+  width = 18,
   units = "cm"
 )
 
-# Comparação entre a distribuição das quantidades
+# Comparativo de distribuições de probabilidade
 
-analitical <- rnorm(10000, bw(300), BW_SD)
-simulation <- rep(bw(300), 10000) %>% add_noise(BW_SD) %>% correct_bids_req()
-tibble(analitical, simulation) %>% 
-  ggplot()+
-  geom_density(aes(analitical * 100)) +
-  geom_density(aes(simulation * 100), linetype = "dashed") +
-  geom_vline(xintercept = mean(analitical * 100)) +
-  geom_vline(xintercept = mean(simulation * 100), linetype = "dashed") +
-  xlab("Orçamentos vencidos - %") +
-  ylab("Freqüência")
+r1 <- gen_br_samples(2000, size = 500) %>% density
+r2 <- gen_br_samples(5000, size = 500) %>% density
+a <- tibble(r1, type = "P = 184")
+b <- tibble(r2, type = "P = 220")
 
-ggsave("./plots/qty_diff.png",
-       height = 7,
-       width = 12,
-       units = "cm")
+tibble(r1_x = r1$x , r1_y = r1$y, r2_x = r2$x, r2_y = r2$y) %>% 
+  write_csv2("./generated-data/r_compare.csv")
+ 
+w1 <- (100 * gen_bw_samples(184, size = 500)) %>% density
+w2 <- (100 * gen_bw_samples(220, size = 500)) %>% density
+
+tibble(w1_x = w1$x, w1_y = w1$y, w2_x = w2$x, w2_y = w2$y) %>% 
+  write_csv2("./generated-data/w_compare.csv")
 
 # Solution plots ----
 
 sim_results <- read_csv2("./generated-data/solution.csv")
 
-sol_table <- 
+sol_table <-
   sim_results %>%
   filter(mean_delta_profit > 0 &
            mean_delta_cost_var < 0) %>%
   group_by(ad) %>%
-  summarise(min = min(p), 
-            max = max(p),
-            max_p_delta_profit = max(p_delta_profit),
-            max_delta_profit = mean_delta_profit[p_delta_profit == max(p_delta_profit)],
-            p_delta_profit = p[p_delta_profit == max(p_delta_profit)],
-            min_p_delta_cost = min(p_delta_cost),
-            min_delta_profit = mean_delta_profit[p_delta_cost == min(p_delta_cost)],
-            min_delta_cost_var = mean_delta_cost_var[p_delta_cost == min(p_delta_cost)],
-            p_delta_cost = p[p_delta_cost == min(p_delta_cost)]
-            
+  summarise(
+    min = min(p),
+    max = max(p),
+    max_p_delta_profit = max(p_delta_profit),
+    max_delta_profit = mean_delta_profit[p_delta_profit == max(p_delta_profit)],
+    p_delta_profit = p[p_delta_profit == max(p_delta_profit)],
+    min_p_delta_cost = min(p_delta_cost),
+    min_delta_profit = mean_delta_profit[p_delta_cost == min(p_delta_cost)],
+    min_delta_cost_var = mean_delta_cost_var[p_delta_cost == min(p_delta_cost)],
+    p_delta_cost = p[p_delta_cost == min(p_delta_cost)]
+    
   )
 write_csv2(sol_table, "./generated-data/sol_table.csv")
 
-exploratory_table <- 
+exploratory_table <-
   sim_results %>%
   filter(mean_delta_profit > 0) %>%
   group_by(ad) %>%
-  summarise(min = min(p), 
-            max = max(p),
-            max_p_delta_profit = max(p_delta_profit),
-            max_delta_profit = mean_delta_profit[p_delta_profit == max(p_delta_profit)],
-            p_at_max_delta_profit = p[p_delta_profit == max(p_delta_profit)],
-            cost_at_max_delta_profit = mean_delta_cost_var[p_delta_profit == max(p_delta_profit)]
-            
+  summarise(
+    min = min(p),
+    max = max(p),
+    max_p_delta_profit = max(p_delta_profit),
+    max_delta_profit = mean_delta_profit[p_delta_profit == max(p_delta_profit)],
+    p_at_max_delta_profit = p[p_delta_profit == max(p_delta_profit)],
+    cost_at_max_delta_profit = mean_delta_cost_var[p_delta_profit == max(p_delta_profit)]
+    
   )
 write_csv2(exploratory_table, "./generated-data/exploratory_table.csv")
 
 solution_plot <- function(var) {
   sim_results %>%
-   filter(mean_delta_profit > 0) %>%
     ggplot(aes(x = p, y = ad, fill = {
       {
         var
@@ -310,28 +163,45 @@ solution_plot <- function(var) {
     geom_raster() +
     scale_fill_viridis_c() +
     xlab("Preço - R$") +
-    ylab("Investimento em \npublicidade - R$")
+    ylab("Investimento em \npublicidade - R$") +
+    theme(panel.background =  element_blank())
 }
 
+p1 <- solution_plot(mean_delta_profit)
+p2 <- solution_plot(p_delta_profit)
+p3 <- solution_plot(mean_delta_margin)
+p4 <- solution_plot(p_delta_margin)
 
-p1 <-
-  solution_plot(mean_delta_profit) + labs(fill = "\u0394L", tag = "A")
-p2 <-
-  solution_plot(p_delta_profit) + labs(fill = "P(\u0394L > 0)", tag = "B")
-p3 <-
-  solution_plot(mean_delta_qty) + labs(fill = "\u0394Q", tag = "C")
-p4 <-
-  solution_plot(mean_delta_cost_var) + labs(fill = "\u0394C", tag = "D")
-g <- arrangeGrob(p1, p2, p3, p4, nrow = 4)
+g <- arrangeGrob(p1, p3, p2, p4, ncol = 2)
+plot(g)
 ggsave(
-  "./plots/solution.png",
+  "./plots/solution1.png",
   plot = g,
   width = 16,
   height = 18,
   units = "cm"
 )
 
-      sim_results %>%
+p1 <-
+  solution_plot(mean_delta_cost_var)
+p2 <-
+  solution_plot(p_delta_cost)
+p3 <-
+  solution_plot(mean_delta_qty)
+p4 <-
+  solution_plot(p_delta_qty)
+g <- arrangeGrob(p1, p3, p2, p4, ncol = 2)
+plot(g)
+
+ggsave(
+  "./plots/solution2.png",
+  plot = g,
+  width = 16,
+  height = 18,
+  units = "cm"
+)
+
+sim_results %>%
   ggplot(aes(
     x = p,
     y = elasticity,
@@ -340,8 +210,13 @@ ggsave(
   )) +
   geom_line()
 
-ggsave("elasticity.png", 
+ggsave("elasticity.png",
        width = 12,
        height = 7,
-       units = "cm"
-       )
+       units = "cm")
+
+sim_results %>%
+  filter(mean_delta_margin > 0 & mean_delta_cost_var < 0) %>%
+  ggplot(aes(x = p, y = ad, fill = mean_delta_margin)) +
+  geom_tile() +
+  scale_fill_viridis_c()
