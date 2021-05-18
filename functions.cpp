@@ -85,7 +85,7 @@ double tax (double annual_rev, double rev) {
   double disc = NA_REAL;
   
   if(annual_rev > 0 && annual_rev < 180e3) {
-    rate = 4./10.7;
+    rate = 4./100;
     disc = 0;
   } else if(annual_rev > 180e3 && annual_rev <= 360e3) {
     rate = 7.3 / 100.;
