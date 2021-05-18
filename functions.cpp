@@ -85,23 +85,23 @@ double tax (double annual_rev, double rev) {
   double disc = NA_REAL;
   
   if(annual_rev > 0 && annual_rev < 180e3) {
-    rate = 4./100;
+    rate = 4.5/100;
     disc = 0;
   } else if(annual_rev > 180e3 && annual_rev <= 360e3) {
-    rate = 7.3 / 100.;
+    rate = 7.8 / 100.;
     disc = 5940.;
   } else if(annual_rev > 360e3 && annual_rev <= 720e3) {
-    rate = 9.5 / 100.;
+    rate = 10. / 100.;
     disc = 13860.;
   } else if(annual_rev > 720e3 + 1 & annual_rev <= 1.8e6) {
-    rate = 10.7 / 100.;
+    rate = 11.2 / 100.;
     disc = 22500.;
   } else if(annual_rev > 1.8e6 + 1 & annual_rev <= 3.6e6) {
-    rate = 14.3 / 100.;
-    disc = 87300.;
+    rate = 14.7 / 100.;
+    disc = 85500.;
   } else if(annual_rev > 3.6e6 + 1 & annual_rev <= 4.8e6) {
-    rate = 19.0 / 100.;
-    disc = 378000.;
+    rate = 30.0 / 100.;
+    disc = 720000.;
   }
   
   double tax = (annual_rev * rate - disc) / annual_rev;
