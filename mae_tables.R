@@ -21,5 +21,11 @@ mae_table <- function(estimate, sample_sizes) {
 
 set.seed(123)
 iters <- seq(5e3, 30e3, 5e3)
-mae_table("dtax", iters)
-mae_table("p_out", iters)
+dtax_mae = as.data.frame(t(mae_table("dtax", iters)))
+p_out_mae = as.data.frame(t(mae_table("p_out", iters)))
+
+print(dtax_mae)
+print(p_out_mae)
+
+write.csv2(dtax_mae, "./results/dtax_mae.csv")
+write.csv2(p_out_mae, "./results/p_out_mae.csv")
