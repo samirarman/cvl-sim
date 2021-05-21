@@ -11,10 +11,10 @@ find_at_max <- function(data) {
   data %>%
     group_by(qr_scen) %>%
     summarise(
-      max_dp = max(dprofit_net),
-      p_at_point = p[which.max(dprofit_net)],
-      ad_at_point = ad[which.max(dprofit_net)],
-      dcost_at_point = dcost[which.max(dprofit_net)]
+      max_dp = max(dprofit_net_smooth),
+      p_at_point = p[which.max(dprofit_net_smooth)],
+      ad_at_point = ad[which.max(dprofit_net_smooth)],
+      dcost_at_point = dcost[which.max(dprofit_net_smooth)]
     ) %>%
     right_join(tibble(qr_scen = 1:3)) %>%
     t
@@ -28,7 +28,7 @@ find_at_min <- function(data) {
       min_cost = min(dcost),
       p_at_point = p[which.min(dcost)],
       ad_at_point = ad[which.min(dcost)],
-      dprofit_net = dprofit_net[which.min(dcost)]
+      dprofit_net_smooth = dprofit_net_smooth[which.min(dcost)]
     ) %>%
     right_join(tibble(qr_scen = 1:3)) %>%
     t
@@ -51,7 +51,7 @@ tables <- function(scenario) {
   opt_increase <-
     grid %>%
     filter(qw_scen == scenario &
-             p > p0 & dprofit_net > 0 & dcost <= 0) %>%
+             p > p0 & dprofit_net_smooth > 0 & dcost <= 0) %>%
     find_at_max
 
   # Encontra o menor capital requerido com lucro igual
@@ -59,7 +59,7 @@ tables <- function(scenario) {
   min_cost <-
     grid %>%
     filter(qw_scen == scenario &
-             p > p0 & dprofit_net > 0 & dcost <= 0) %>%
+             p > p0 & dprofit_net_smooth > 0 & dcost <= 0) %>%
     find_at_min
 
   rbind(max_profit, keep_price, opt_increase, min_cost)
