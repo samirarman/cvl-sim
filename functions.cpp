@@ -87,10 +87,10 @@ List dtax(double drev, int iter = 1000) {
   }
 
   NumericVector dtax = new_tax - base_tax;
-  double med_dtax = mean(na_omit(dtax));
+  double mean_dtax = mean(na_omit(dtax));
   LogicalVector p_out = is_na(dtax);
   double prob_out = double (sum(p_out)) / p_out.length();
 
-  return(List::create(Named("dtax") = med_dtax,
+  return(List::create(Named("dtax") = mean_dtax,
                       _["p_out"] = prob_out));
 }
