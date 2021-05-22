@@ -1,5 +1,21 @@
 library(tidyverse)
+library(Rcpp)
+library(RcppDist)
+sourceCpp("functions.cpp")
 
+# Exemplo do efeito do MCM ------
+revs <- seq(200e3, 400e3, 1e3)
+tax_nomcm <- map_dbl(revs, ~tax(rep(.x, 13)))
+
+set.seed(123)
+mcm <- map(revs, ~replicate(1000, tax(rnorm(13, .x, 42359.15))))
+tax_mcm <- map_dbl(mcm, ~mean(.x, na.rm = TRUE))
+p_out <- map_dbl(mcm, ~sum(is.na(.x)/length(.x)))
+
+data.frame(revs, no_mcm, tax_nomcm, p_out) %>%
+  write_csv2("./results/mcm_effect.csv")
+
+# Gráficos do comportamento
 data <- read_csv2("./results/simulation.csv")
 
 data %>%
