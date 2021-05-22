@@ -12,7 +12,7 @@ mcm <- map(revs, ~replicate(1000, tax(rnorm(13, .x, 42359.15))))
 tax_mcm <- map_dbl(mcm, ~mean(.x, na.rm = TRUE))
 p_out <- map_dbl(mcm, ~sum(is.na(.x)/length(.x)))
 
-data.frame(revs, no_mcm, tax_nomcm, p_out) %>%
+data.frame(revs, tax_mcm, tax_nomcm, p_out) %>%
   write_csv2("./results/mcm_effect.csv")
 
 # Gráficos do comportamento
